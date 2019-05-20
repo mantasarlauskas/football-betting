@@ -1,0 +1,12 @@
+C:\Users\Mantas\Desktop\IntelektikaProjektas\IntelektikaProjektas\bin\Debug\netcoreapp2.2\IntelektikaProjektas.deps.json
+C:\Users\Mantas\Desktop\IntelektikaProjektas\IntelektikaProjektas\bin\Debug\netcoreapp2.2\IntelektikaProjektas.runtimeconfig.json
+C:\Users\Mantas\Desktop\IntelektikaProjektas\IntelektikaProjektas\bin\Debug\netcoreapp2.2\IntelektikaProjektas.runtimeconfig.dev.json
+C:\Users\Mantas\Desktop\IntelektikaProjektas\IntelektikaProjektas\bin\Debug\netcoreapp2.2\IntelektikaProjektas.dll
+C:\Users\Mantas\Desktop\IntelektikaProjektas\IntelektikaProjektas\bin\Debug\netcoreapp2.2\IntelektikaProjektas.pdb
+C:\Users\Mantas\Desktop\IntelektikaProjektas\IntelektikaProjektas\obj\Debug\netcoreapp2.2\IntelektikaProjektas.csproj.CoreCompileInputs.cache
+C:\Users\Mantas\Desktop\IntelektikaProjektas\IntelektikaProjektas\obj\Debug\netcoreapp2.2\IntelektikaProjektas.AssemblyInfoInputs.cache
+C:\Users\Mantas\Desktop\IntelektikaProjektas\IntelektikaProjektas\obj\Debug\netcoreapp2.2\IntelektikaProjektas.AssemblyInfo.cs
+C:\Users\Mantas\Desktop\IntelektikaProjektas\IntelektikaProjektas\obj\Debug\netcoreapp2.2\IntelektikaProjektas.dll
+C:\Users\Mantas\Desktop\IntelektikaProjektas\IntelektikaProjektas\obj\Debug\netcoreapp2.2\IntelektikaProjektas.pdb
+C:\Users\Mantas\Desktop\IntelektikaProjektas\IntelektikaProjektas\obj\Debug\netcoreapp2.2\IntelektikaProjektas.csprojAssemblyReference.cache
+C:\Users\Mantas\Desktop\IntelektikaProjektas\IntelektikaProjektas\bin\Debug\netcoreapp2.2\Accord.dll.config
