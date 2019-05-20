@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Net;
 using Newtonsoft.Json;
+using MathNet.Numerics.LinearAlgebra;
 
 namespace IntelektikaProjektas
 {
@@ -26,16 +27,69 @@ namespace IntelektikaProjektas
             return client;
         }
 
-        static List<FootballData> GetDataFromFile()
+        /*static string GetTypeOfOdds(double odds)
+        {
+            return odds <= 2 ? "small" : odds > 3.5 ? "big" : "medium";
+        }
+
+        static string GetTypeOfRanking(int ranking)
+        {
+            return ranking <= 1600 ? "small" : ranking > 1800 ? "big" : "medium";
+        }*/
+
+        /*static double[] calculateOddsBoundaries(List<string[]> lines)
+        {
+            double max = 0;
+            double min = double.Parse(lines[0][17]);
+            foreach (string[] columns in lines)
+            {
+                foreach (string column in columns)
+                {
+                    double homeTeamWinOdds = double.Parse(columns[17]);
+                    double awayTeamWinOdds = double.Parse(columns[18]);
+                    double drawOdds = double.Parse(columns[19]);
+                    if (max < homeTeamWinOdds) max = homeTeamWinOdds;
+                    if (max < awayTeamWinOdds) max = awayTeamWinOdds;
+                    if (max < drawOdds) max = drawOdds;
+                    if (min > homeTeamWinOdds) min = homeTeamWinOdds;
+                    if (min > awayTeamWinOdds) min = awayTeamWinOdds;
+                    if (min > drawOdds) min = drawOdds;
+                }
+            }
+            return new double[2] { min, max };
+        }*/
+
+        public static Matrix<double> ConvertToMatrix(List<List<string>> lines)
+        {
+            int count = 0;
+            Matrix<double> data = Matrix<double>.Build.Dense(lines.Count, lines[0].Count);
+            foreach (List<string> line in lines)
+            {
+                if (line[4] == "H") line[4] = "0";
+                if (line[4] == "D") line[4] = "1";
+                if (line[4] == "A") line[4] = "2";
+                if (line[9] == "H") line[9] = "0";
+                if (line[9] == "D") line[9] = "1";
+                if (line[9] == "A") line[9] = "2";
+                string[] arr = line.ToArray();
+                data.SetRow(count, arr.Select(double.Parse).ToArray());
+                count++;
+            }
+            return data;
+        }
+
+        static Matrix<double> GetDataFromFile()
         {
             string[] lines = File.ReadAllLines("matches.csv");
-            List<FootballData> data = new List<FootballData>();
-            List<string[]> newData = new List<string[]>();
             lines = lines.Skip(1).ToArray();
+            List<List<string>> parsedLines = new List<List<string>>();
             foreach (string line in lines)
             {
-                string[] columns = line.Split(',');
+                List<string> columns = line.Split(',').ToList();
                 bool existsEmptyColumns = false;
+                columns.RemoveAt(0);
+                columns.RemoveAt(0);
+                columns.RemoveAt(0);
                 foreach (string column in columns)
                 {
                     if(column == @"\N")
@@ -44,29 +98,38 @@ namespace IntelektikaProjektas
                         break;
                     }
                 }
+                if (!existsEmptyColumns && double.Parse(columns[17]) == 0) existsEmptyColumns = true;
                 if (!existsEmptyColumns)
                 {
-                    newData.Add(columns);
-                    /*string matchResult = columns[7];
-                    int homeTeamRanking = int.Parse(columns[8]);
-                    int awayTeamRanking = int.Parse(columns[9]);
-                    double homeTeamWinOdds = double.Parse(columns[17]);
-                    double awayTeamWinOdds = double.Parse(columns[18]);
-                    double drawOdds = double.Parse(columns[19]);
-                    FootballData matchData = new FootballData(matchResult, homeTeamRanking, awayTeamRanking, homeTeamWinOdds, awayTeamWinOdds, drawOdds);
-                    data.Add(matchData);*/
+                    parsedLines.Add(columns);
                 }
             }
 
-            foreach(string[] row in newData)
-            {
-                //Console.WriteLine(row[0]);
-            }
+           // Matrix<double>
+            //Console.WriteLine(parsedLines[0][9]); //4 ir 9
 
-            return data;
+            /*
+            double[] boundaries = calculateOddsBoundaries(parsedLines);
+            Console.WriteLine((boundaries[1] - boundaries[0]) / 3);
+
+            foreach (string[] columns in parsedLines)
+            {
+                foreach(string column in columns)
+                {
+                    string matchResult = columns[7];
+                    string homeTeamRanking = GetTypeOfRanking(int.Parse(columns[8]));
+                    string awayTeamRanking = GetTypeOfRanking(int.Parse(columns[9]));
+                    string homeTeamWinOdds = GetTypeOfOdds(double.Parse(columns[17]));
+                    string awayTeamWinOdds = GetTypeOfOdds(double.Parse(columns[18]));
+                    string drawOdds = GetTypeOfOdds(double.Parse(columns[19]));
+                    FootballData matchData = new FootballData(matchResult, homeTeamRanking, awayTeamRanking, homeTeamWinOdds, awayTeamWinOdds, drawOdds);
+                    data.Add(matchData);
+                }
+            }*/
+            return ConvertToMatrix(parsedLines);
         }
 
-        static List<FootballData> ReadData()
+        static Matrix<double> ReadData()
         {
             if (!File.Exists("matches.csv"))
             {
@@ -79,6 +142,72 @@ namespace IntelektikaProjektas
             return GetDataFromFile();
         }
 
+        public static Matrix<double> NormalizeData(Matrix<double> data)
+        {
+            Matrix<double> newData = Matrix<double>.Build.Dense(data.RowCount, data.ColumnCount);
+            for (int i = 0; i < data.ColumnCount; i++)
+            {
+                Vector<double> column = data.Column(i);
+                Vector<double> newColumn = Vector<double>.Build.Dense(column.Count);
+                double min = column.Min();
+                double max = column.Max();
+                for (int j = 0; j < column.Count; j++)
+                {
+                    newColumn[j] = (column[j] - min) / (max - min);
+                }
+                newData.SetColumn(i, newColumn);
+            }
+            return newData;
+        }
+
+        static double Covariance(Vector<double> arr1, Vector<double> arr2)
+        {
+            int n = arr1.Count;
+            double mean1 = arr1.Average();
+            double mean2 = arr2.Average();
+            double sum = 0;
+            for (int i = 0; i < n; i++)
+                sum = sum + (arr1[i] - mean1) * (arr2[i] - mean2);
+            return sum / (n - 1);
+        }
+
+        static Matrix<double> GetCovarianceMatrix(Matrix<double> data)
+        {
+            Matrix<double> covarianceMatrix = Matrix<double>.Build.Dense(data.ColumnCount, data.ColumnCount);
+            for(int i = 0; i < data.ColumnCount; i++)
+            {
+                for(int j = 0; j < data.ColumnCount; j++)
+                {
+                    covarianceMatrix[i, j] = Covariance(data.Column(i), data.Column(j));
+                }
+            }
+            return covarianceMatrix;
+        }
+
+
+        static List<KeyValuePair<double, double>> GetSortedFullTimeResultCovariance(Matrix<double> covarienceMatrix)
+        {
+            List<KeyValuePair<double, double>> fullTimeResultCovariance = new List<KeyValuePair<double, double>>();
+            for (int i = 0; i < covarienceMatrix.ColumnCount; i++)
+            {
+                fullTimeResultCovariance.Add(new KeyValuePair<double, double>(i, Math.Abs(covarienceMatrix[i, 4])));
+            }
+            return fullTimeResultCovariance.OrderByDescending(x => x.Value).ToList();
+        }
+
+        static Matrix<double> GetSmallerMatrix(List<KeyValuePair<double, double>> ftr, Matrix<double> data, int dimCount)
+        {
+            Matrix<double> newMatrix = Matrix<double>.Build.Dense(data.RowCount, dimCount);
+            newMatrix.SetColumn(0, data.Column(4));
+            for (int i = 0; i < dimCount - 1; i++)
+            {
+                newMatrix.SetColumn(i + 1, data.Column((int)ftr[i].Key));
+                Console.WriteLine(ftr[i].Key);
+            }
+            return newMatrix;
+        }
+
+        /*
         static List<FootballData> GetTrainingData(int index, int segmentSize, List<FootballData> data)
         {
             List<FootballData> trainingData = new List<FootballData>();
@@ -128,13 +257,33 @@ namespace IntelektikaProjektas
             Console.WriteLine("away Win count " + results.AwayTeamWinCount);
             Console.WriteLine("draw count " + results.DrawCount);
             Console.WriteLine(results.HomeTeamWinCount + results.AwayTeamWinCount + results.DrawCount);
-        }
+        }*/
 
         static void Main(string[] args)
         {
-            int n = 10;
-            List<FootballData> data = ReadData();
-            int segmentSize = data.Count / n;
+            int dimensions = 6;
+            Matrix<double> data = ReadData();
+            Console.WriteLine("Duomenys iš failo: \n" + data.ToMatrixString());
+            Matrix<double> normalizedData = NormalizeData(data);
+            Console.WriteLine("Normalizuoti duomenys: \n" + normalizedData.ToMatrixString());
+            Matrix<double> covarienceMatrix = GetCovarianceMatrix(data);
+            Console.WriteLine("Kovariacijos matrica: \n" + covarienceMatrix.ToMatrixString());
+            List<KeyValuePair<double, double>> ftrSortedCovarianceList = GetSortedFullTimeResultCovariance(covarienceMatrix);
+            Console.WriteLine("Full Time Result stulpelio kovariacijos reikšmės su kitais stulpeliais surikiuoti mažėjimo tvarka");
+            for(int i = 0; i < ftrSortedCovarianceList.Count; i++)
+            {
+                Console.WriteLine("[{0}, {1}]", ftrSortedCovarianceList[i].Key, ftrSortedCovarianceList[i].Value);
+            }
+            Matrix<double> newData = GetSmallerMatrix(ftrSortedCovarianceList, normalizedData, dimensions);
+            Console.WriteLine("Duomenys po dimencijų sumažinimo: \n" + newData.ToMatrixString());
+
+
+            // Console.WriteLine("Covarience matrix: \n" + list.ToString());
+            /*  for (int i = 0; i < data.Count; i++)
+              {
+                  Console.WriteLine(data[i].HomeTeamWinOdds);
+              }
+              int segmentSize = data.Count / n;*/
             /*for (int i = 0; i < 1; i++)
             {
                 List<FootballData> trainingData = GetTrainingData(i, segmentSize, data);
