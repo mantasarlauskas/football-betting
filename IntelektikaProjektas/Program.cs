@@ -11,6 +11,13 @@ namespace IntelektikaProjektas
 {
     class Program
     {
+        const string HIGH = "High";
+        const string MEDIUM = "Medium";
+        const string LOW = "Low";
+        const string TOTAL = "TOTAL";
+        const int FTR_COLUMN = 6;
+        static string DASHES = new string('-', 50);
+
         static WebClient CreateClientWithAuthorizationHeader()
         {
             WebClient client = new WebClient();
@@ -84,7 +91,6 @@ namespace IntelektikaProjektas
                         break;
                     }
                 }
-                if (!existsEmptyColumns && double.Parse(columns[16]) == 0) existsEmptyColumns = true;
                 if (!existsEmptyColumns)
                 {
                     parsedLines.Add(columns);
@@ -144,7 +150,7 @@ namespace IntelektikaProjektas
         static Matrix<double> GetCovarianceMatrix(Matrix<double> data)
         {
             Matrix<double> covarianceMatrix = Matrix<double>.Build.Dense(data.ColumnCount, data.ColumnCount);
-            for(int i = 0; i < data.ColumnCount; i++)
+            for (int i = 0; i < data.ColumnCount; i++)
             {
                 for(int j = 0; j < data.ColumnCount; j++)
                 {
@@ -159,15 +165,15 @@ namespace IntelektikaProjektas
             List<KeyValuePair<double, double>> fullTimeResultCovariance = new List<KeyValuePair<double, double>>();
             for (int i = 0; i < covarienceMatrix.ColumnCount; i++)
             {
-                fullTimeResultCovariance.Add(new KeyValuePair<double, double>(i, Math.Abs(covarienceMatrix[i, 6])));
+                fullTimeResultCovariance.Add(new KeyValuePair<double, double>(i, Math.Abs(covarienceMatrix[i, FTR_COLUMN])));
             }
             return fullTimeResultCovariance.OrderByDescending(x => x.Value).ToList();
         }
 
-        static Matrix<double> GetSmallerMatrix(List<KeyValuePair<double, double>> ftr, Matrix<double> data, int dimCount)
+        static Matrix<double> GetReducedMatrix(List<KeyValuePair<double, double>> ftr, Matrix<double> data, int dimCount)
         {
             Matrix<double> newMatrix = Matrix<double>.Build.Dense(data.RowCount, dimCount);
-            newMatrix.SetColumn(0, data.Column(6));
+            newMatrix.SetColumn(0, data.Column(FTR_COLUMN));
             for (int i = 0; i < dimCount - 1; i++)
             {
                 newMatrix.SetColumn(i + 1, data.Column((int)ftr[i].Key));
@@ -188,111 +194,285 @@ namespace IntelektikaProjektas
             return new double[2] { min + intervalSize, max - intervalSize};
         }
 
-        static string[,] PrepareDataForBayes(Matrix <double> data)
+        static string[,] BinData(Matrix <double> data)
         {
-            string[,] bayesData = new string[data.RowCount, data.ColumnCount];
+            string[,] binnedData = new string[data.RowCount, data.ColumnCount];
             for (int i = 0; i < data.ColumnCount; i++)
             {
                 double[] boundaries = CalculateBoundaries(data.Column(i));
                 for (int j = 0; j < data.RowCount; j++)
                 {
-                    if (data[j, i] >= boundaries[1]) bayesData[j, i] = "High";
-                    else if (data[j, i] <= boundaries[0]) bayesData[j, i] = "Low";
-                    else bayesData[j, i] = "Medium";
+                    if (data[j, i] >= boundaries[1]) binnedData[j, i] = HIGH;
+                    else if (data[j, i] <= boundaries[0]) binnedData[j, i] = LOW;
+                    else binnedData[j, i] = MEDIUM;
                 }
             }
-            return bayesData;
+            return binnedData;
         }
 
-        /*
-        static List<FootballData> GetTrainingData(int index, int segmentSize, List<FootballData> data)
+        static Counts CalculateFullTimeResultsTotals(string[,] binnedData)
         {
-            List<FootballData> trainingData = new List<FootballData>();
-            for (int i = 0; i < data.Count; i++)
+            Counts totals = new Counts();
+            for(int i = 0; i < binnedData.GetLength(0); i++)
+            {
+                if (binnedData[i, 0] == HIGH)
+                {
+                    totals.highCount++;
+                }
+                else if (binnedData[i, 0] == MEDIUM)
+                {
+                    totals.mediumCount++;
+                }
+                else
+                {
+                    totals.lowCount++;
+                }
+            }
+            return totals;
+        }
+
+        static Dictionary<int, List<Counts>> CalculateJointCounts(string[,] binnedData, Counts ftrTotals)
+        {
+            Dictionary<int, List<Counts>> jointCounts = new Dictionary<int, List<Counts>>();
+            string[] values = new string[4] { LOW, MEDIUM, HIGH, TOTAL};
+            for (int i = 1; i < binnedData.GetLength(1); i++)
+            {
+                List<Counts> columnCounts = new List<Counts>(); 
+                for (int j = 0; j < values.Length; j++)
+                {
+                    Counts counts = new Counts();
+                    for (int k = 0; k < binnedData.GetLength(0); k++)
+                    {
+                        string value = binnedData[k, i];
+                        string ftrValue = binnedData[k, 0];
+                        if (value == values[0] && (ftrValue == values[j] || values[j] == TOTAL))
+                        {
+                            counts.highCount++;
+                        }
+                        else if (value == values[1] && (ftrValue == values[j] || values[j] == TOTAL))
+                        {
+                            counts.mediumCount++;
+                        }
+                        else if (value == values[2] && (ftrValue == values[j] || values[j] == TOTAL))
+                        {
+                            counts.lowCount++;
+                        }
+                    }
+                    double totalCount = values[j] == LOW ? ftrTotals.lowCount : 
+                        values[j] == HIGH ? ftrTotals.highCount :
+                        values[j] == MEDIUM ? ftrTotals.mediumCount : binnedData.GetLength(0);
+                    counts.lowCountProbability = counts.lowCount / totalCount;
+                    counts.mediumCountProbability = counts.mediumCount / totalCount;
+                    counts.highCountProbability = counts.highCount / totalCount;
+                    columnCounts.Add(counts);
+                }
+                jointCounts.Add(i, columnCounts);
+            }
+            return jointCounts;
+        }
+
+        static string ParseResult(double awayTeamWinProbability, double drawProbability, double homeTeamWinprobability)
+        {
+            if (awayTeamWinProbability > drawProbability && awayTeamWinProbability > homeTeamWinprobability)
+            {
+                return HIGH;
+            }
+            else if (drawProbability > homeTeamWinprobability)
+            {
+                return MEDIUM;
+            }
+            else
+            {
+                return LOW;
+            }
+        }
+
+        static void AnalyzeData(string[,] binnedData, Dictionary<int, List<Counts>> jointCounts, Counts ftrTotals, string type)
+        {
+            string[] values = new string[3] { LOW, MEDIUM, HIGH };
+            int correctCount = 0;
+            int wrongCount = 0;
+            for (int j = 0; j < binnedData.GetLength(0); j++)
+            {
+                double homeTeamWinprobability = 1;
+                double drawProbability = 1;
+                double awayTeamWinProbability = 1;
+                double evidence = 1;
+                for (int i = 1; i < binnedData.GetLength(1); i++)
+                {
+                    string value = binnedData[j, i];
+                    List<Counts> columnCounts = jointCounts[i];
+                    if (value == values[0])
+                    {
+                        homeTeamWinprobability *= columnCounts[0].lowCountProbability;
+                        drawProbability *= columnCounts[1].lowCountProbability;
+                        awayTeamWinProbability *= columnCounts[2].lowCountProbability;
+                        evidence *= columnCounts[3].lowCountProbability;
+
+                    }
+                    else if (value == values[1])
+                    {
+                        homeTeamWinprobability *= columnCounts[0].mediumCountProbability;
+                        drawProbability *= columnCounts[1].mediumCountProbability;
+                        awayTeamWinProbability *= columnCounts[2].mediumCountProbability;
+                        evidence *= columnCounts[3].mediumCountProbability;
+                    }
+                    else
+                    {
+                        homeTeamWinprobability *= columnCounts[0].highCountProbability;
+                        drawProbability *= columnCounts[1].highCountProbability;
+                        awayTeamWinProbability *= columnCounts[2].highCountProbability;
+                        evidence *= columnCounts[3].highCountProbability;
+                    }
+                }
+                homeTeamWinprobability *= (double)ftrTotals.lowCount / binnedData.GetLength(0);
+                drawProbability *= (double)ftrTotals.mediumCount / binnedData.GetLength(0);
+                awayTeamWinProbability *= (double)ftrTotals.highCount / binnedData.GetLength(0);
+               // homeTeamWinprobability /= evidence;
+               // drawProbability /= evidence;
+               // awayTeamWinProbability /= evidence;
+                string result = ParseResult(awayTeamWinProbability, drawProbability, homeTeamWinprobability);
+                if (binnedData[j, 0] == result)
+                {
+                    correctCount++;
+                }
+                else
+                {
+                    wrongCount++;
+                }
+            }
+            Console.WriteLine(type);
+            Console.WriteLine("Teisingų: {0}", correctCount);
+            Console.WriteLine("Teisingų procentais: {0}%", Math.Round((double)correctCount / binnedData.GetLength(0) * 100, 2));
+            Console.WriteLine("Neteisingų: {0}", wrongCount);
+            Console.WriteLine("Neteisingų procentais: {0}%", Math.Round((double)wrongCount / binnedData.GetLength(0) * 100, 2));
+            Console.WriteLine("Iš viso: {0}", binnedData.GetLength(0));
+        }
+
+        static void PrintCovarianceList(List<KeyValuePair<double, double>> ftrSortedCovarianceList)
+        {
+            Console.WriteLine("Full Time Result stulpelio kovariacijos reikšmės lyginant su kitais stulpeliais surikiuotos mažėjimo tvarka");
+            for (int i = 0; i < ftrSortedCovarianceList.Count; i++)
+            {
+                Console.WriteLine("[{0}, {1}]", ftrSortedCovarianceList[i].Key, ftrSortedCovarianceList[i].Value);
+            }
+        }
+
+        static void PrintBinnedData(string[,] binnedData)
+        {
+            Console.WriteLine("Pakeistų duomenų pavyzdys:");
+            for (int j = 0; j < 3; j++)
+            {
+                for (int i = 0; i < binnedData.GetLength(1); i++)
+                    Console.Write(binnedData[j, i] + " ");
+                Console.WriteLine("");
+            }
+        }
+        
+        static void PrintJointCounts(Dictionary<int, List<Counts>> jointCounts)
+        {
+            foreach (var item in jointCounts)
+            {
+                Console.WriteLine(DASHES);
+                Console.WriteLine("Stulpelio numeris: " + item.Key);
+                Console.WriteLine(DASHES);
+                int counter = 0;
+                foreach (var counts in item.Value)
+                {
+                    string ftr;
+                    if (counter == 0)
+                    {
+                        ftr = "Namų komanda laimėjo";
+                    }
+                    else if (counter == 1)
+                    {
+                        ftr = "Lygiosios";
+                    }
+                    else
+                    {
+                        ftr = "Išvykos komanda laimėjo";
+                    }
+                    Console.WriteLine("Įvyko rezultatas: " + ftr);
+                    Console.WriteLine("Stulpelių kiekiai įvykus šiam rezultatui:");
+                    Console.WriteLine("Low: {0}, Medium: {1}, High: {2}", counts.lowCount, counts.mediumCount, counts.highCount);
+                    Console.WriteLine("Tikimybės:");
+                    Console.WriteLine("Low: {0}, Medium: {1}, High: {2}", Math.Round(counts.lowCountProbability, 4),
+                        Math.Round(counts.mediumCountProbability, 4), Math.Round(counts.highCountProbability, 4));
+                    counter++;
+                    Console.WriteLine(DASHES);
+                }
+                Console.WriteLine(DASHES);
+            }
+        }
+
+        static string[,] GetTrainingData(string[,] data, int segmentSize, int index)
+        {
+            string[,] trainingData = new string[data.GetLength(0) - segmentSize, data.GetLength(1)];
+            int counter = 0;
+            for (int i = 0; i < data.GetLength(0); i++)
             {
                 if (i < (index * segmentSize) || i >= (index * segmentSize + segmentSize))
                 {
-                    trainingData.Add(data[i]);
+                    for (int j = 0; j < data.GetLength(1); j++)
+                    {
+                        trainingData[counter, j] = data[i, j];
+                    }
+                    counter++;
                 }
             }
             return trainingData;
         }
 
-        static List<FootballData> GetTestingData(int index, int segmentSize, List<FootballData> data)
+        static string[,] GetTestingData(string[,] data, int segmentSize, int index)
         {
-            List<FootballData> testingData = new List<FootballData>();
-            for (int i = 0; i < data.Count; i++)
+            string[,] testingData = new string[segmentSize, data.GetLength(1)];
+            int counter = 0;
+            for (int i = 0; i < data.GetLength(0); i++)
             {
                 if (i >= (index * segmentSize) && i < (index * segmentSize + segmentSize))
                 {
-                    testingData.Add(data[i]);
+                    for (int j = 0; j < data.GetLength(1); j++)
+                    {
+                        testingData[counter, j] = data[i, j];
+                    }
+                    counter++;
                 }
             }
             return testingData;
         }
 
-        static void AnalyzeTrainingData(List<FootballData> data)
-        {
-            Console.WriteLine("Total data count" + data.Count);
-            Results results = new Results();
-            foreach (FootballData matchData in data)
-            {
-                if (matchData.FullTimeResult == "H")
-                {
-                    results.HomeTeamWinCount++;
-                }
-                else if (matchData.FullTimeResult == "A")
-                {
-                    results.AwayTeamWinCount++;
-                }
-                else if (matchData.FullTimeResult == "D")
-                {
-                    results.DrawCount++;
-                }
-            }
-            Console.WriteLine("home Win count " + results.HomeTeamWinCount);
-            Console.WriteLine("away Win count " + results.AwayTeamWinCount);
-            Console.WriteLine("draw count " + results.DrawCount);
-            Console.WriteLine(results.HomeTeamWinCount + results.AwayTeamWinCount + results.DrawCount);
-        }*/
-
         static void Main(string[] args)
         {
-            int dimensions = 6;
+            int segmentCount = 10;
+            int dimensions = 5;
             Matrix<double> data = ReadData();
+            int segmentSize = data.RowCount / segmentCount; 
             Console.WriteLine("Duomenys iš failo: \n" + data.ToMatrixString());
             Matrix<double> normalizedData = NormalizeData(data);
             Console.WriteLine("Normalizuoti duomenys: \n" + normalizedData.ToMatrixString());
             Matrix<double> covarienceMatrix = GetCovarianceMatrix(data);
             Console.WriteLine("Kovariacijos matrica: \n" + covarienceMatrix.ToMatrixString());
             List<KeyValuePair<double, double>> ftrSortedCovarianceList = GetSortedFullTimeResultCovariance(covarienceMatrix);
-            Console.WriteLine("Full Time Result stulpelio kovariacijos reikšmės su kitais stulpeliais surikiuoti mažėjimo tvarka");
-            for(int i = 0; i < ftrSortedCovarianceList.Count; i++)
-            {
-                Console.WriteLine("[{0}, {1}]", ftrSortedCovarianceList[i].Key, ftrSortedCovarianceList[i].Value);
-            }
-            Matrix<double> newData = GetSmallerMatrix(ftrSortedCovarianceList, normalizedData, dimensions);
+            PrintCovarianceList(ftrSortedCovarianceList);
+            Matrix<double> newData = GetReducedMatrix(ftrSortedCovarianceList, normalizedData, dimensions);
             Console.WriteLine("Duomenys po dimencijų sumažinimo: \n" + newData.ToMatrixString());
-            string[,] bayesData = PrepareDataForBayes(newData);
-            for (int i = 0; i < newData.RowCount; i++)
+            string[,] binnedData = BinData(newData);
+            PrintBinnedData(binnedData);
+            for (int i = 0; i < segmentCount; i++)
             {
-                for (int j = 0; j < newData.ColumnCount; j++)
-                    Console.Write(bayesData[i, j] + " ");
-                Console.WriteLine("");
-            }
-
-            // Console.WriteLine("Covarience matrix: \n" + list.ToString());
-            /*  for (int i = 0; i < data.Count; i++)
-              {
-                  Console.WriteLine(data[i].HomeTeamWinOdds);
-              }
-              int segmentSize = data.Count / n;*/
-            /*for (int i = 0; i < 1; i++)
-            {
-                List<FootballData> trainingData = GetTrainingData(i, segmentSize, data);
-                List<FootballData> testingData = GetTestingData(i, segmentSize, data);
-                AnalyzeTrainingData(trainingData);
-            }*/
+                string[,] trainingData = GetTrainingData(binnedData, segmentSize, i);
+                string[,] testingData = GetTestingData(binnedData, segmentSize, i);
+                Counts ftrTotals = CalculateFullTimeResultsTotals(trainingData);
+                Console.WriteLine("Namų komandų pergalės: {0}, Lygiosios: {1}, Išvykos komandų pergalės: {2}",
+                    ftrTotals.lowCount, ftrTotals.mediumCount, ftrTotals.highCount);
+                Dictionary<int, List<Counts>> jointCounts = CalculateJointCounts(trainingData, ftrTotals);
+                //  PrintJointCounts(jointCounts);
+                Console.WriteLine("{0}\nIteracija nr. {1}\n{2}", DASHES, i + 1, DASHES);
+                AnalyzeData(trainingData, jointCounts, ftrTotals, "Mokymosi duomenys");
+                Console.WriteLine(DASHES);
+                AnalyzeData(testingData, jointCounts, ftrTotals, "Testavimo duomenys");
+                Console.WriteLine(DASHES);
+            } 
         }
     }
 }
