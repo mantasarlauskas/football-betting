@@ -17,6 +17,7 @@ namespace IntelektikaProjektas
         const string TOTAL = "TOTAL";
         const int FTR_COLUMN = 6;
         static string DASHES = new string('-', 50);
+        static List<string> ATTRIBUTE_NAMES;
 
         static WebClient CreateClientWithAuthorizationHeader()
         {
@@ -40,6 +41,7 @@ namespace IntelektikaProjektas
             Matrix<double> data = Matrix<double>.Build.Dense(lines.Count, lines[0].Count);
             foreach (List<string> line in lines)
             {
+                // Change Home, Draw and Away letters to numbers
                 if (line[6] == "H") line[6] = "0";
                 if (line[6] == "D") line[6] = "1";
                 if (line[6] == "A") line[6] = "2";
@@ -56,6 +58,8 @@ namespace IntelektikaProjektas
         static Matrix<double> GetDataFromFile()
         {
             string[] lines = File.ReadAllLines("matches.csv");
+            ATTRIBUTE_NAMES = lines[0].Split(",").ToList();
+            ATTRIBUTE_NAMES.RemoveAt(0);
             lines = lines.Skip(1).ToArray();
             List<List<string>> parsedLines = new List<List<string>>();
             Dictionary<string, string> competitions = new Dictionary<string, string>()
@@ -78,8 +82,10 @@ namespace IntelektikaProjektas
                 { "T1", "15" },
             };
 
+            int count = 0;
             foreach (string line in lines)
             {
+                if (count > 1500) break;
                 List<string> columns = line.Split(',').ToList();
                 bool existsEmptyColumns = false;
                 columns.RemoveAt(0);
@@ -95,6 +101,7 @@ namespace IntelektikaProjektas
                 {
                     parsedLines.Add(columns);
                 }
+                count++;
             }
 
             foreach (List<string> line in parsedLines)
@@ -123,13 +130,15 @@ namespace IntelektikaProjektas
             Matrix<double> newData = Matrix<double>.Build.Dense(data.RowCount, data.ColumnCount);
             for (int i = 0; i < data.ColumnCount; i++)
             {
+              
                 Vector<double> column = data.Column(i);
                 Vector<double> newColumn = Vector<double>.Build.Dense(column.Count);
                 double min = column.Min();
                 double max = column.Max();
+                double average = column.Average();
                 for (int j = 0; j < column.Count; j++)
                 {
-                    newColumn[j] = (column[j] - min) / (max - min);
+                    newColumn[j] = max - min != 0 ? (column[j] - min) / (max - min) : 0;
                 }
                 newData.SetColumn(i, newColumn);
             }
@@ -154,7 +163,14 @@ namespace IntelektikaProjektas
             {
                 for(int j = 0; j < data.ColumnCount; j++)
                 {
-                    covarianceMatrix[i, j] = Covariance(data.Column(i), data.Column(j));
+                    if (i == j)
+                    {
+                        covarianceMatrix[i, j] = 0;
+                    }
+                    else
+                    {
+                        covarianceMatrix[i, j] = Covariance(data.Column(i), data.Column(j));
+                    }
                 }
             }
             return covarianceMatrix;
@@ -297,7 +313,7 @@ namespace IntelektikaProjektas
                 double homeTeamWinprobability = 1;
                 double drawProbability = 1;
                 double awayTeamWinProbability = 1;
-                double evidence = 1;
+               // double evidence = 1;
                 for (int i = 1; i < binnedData.GetLength(1); i++)
                 {
                     string value = binnedData[j, i];
@@ -307,7 +323,7 @@ namespace IntelektikaProjektas
                         homeTeamWinprobability *= columnCounts[0].lowCountProbability;
                         drawProbability *= columnCounts[1].lowCountProbability;
                         awayTeamWinProbability *= columnCounts[2].lowCountProbability;
-                        evidence *= columnCounts[3].lowCountProbability;
+                      //  evidence *= columnCounts[3].lowCountProbability;
 
                     }
                     else if (value == values[1])
@@ -315,14 +331,14 @@ namespace IntelektikaProjektas
                         homeTeamWinprobability *= columnCounts[0].mediumCountProbability;
                         drawProbability *= columnCounts[1].mediumCountProbability;
                         awayTeamWinProbability *= columnCounts[2].mediumCountProbability;
-                        evidence *= columnCounts[3].mediumCountProbability;
+                      //  evidence *= columnCounts[3].mediumCountProbability;
                     }
                     else
                     {
                         homeTeamWinprobability *= columnCounts[0].highCountProbability;
                         drawProbability *= columnCounts[1].highCountProbability;
                         awayTeamWinProbability *= columnCounts[2].highCountProbability;
-                        evidence *= columnCounts[3].highCountProbability;
+                       // evidence *= columnCounts[3].highCountProbability;
                     }
                 }
                 homeTeamWinprobability *= (double)ftrTotals.lowCount / binnedData.GetLength(0);
@@ -349,12 +365,125 @@ namespace IntelektikaProjektas
             Console.WriteLine("Iš viso: {0}", binnedData.GetLength(0));
         }
 
+        static Matrix<double> GetTrainingData(Matrix<double> data, int segmentSize, int index)
+        {
+            Matrix<double> trainingData = Matrix<double>.Build.Dense(data.RowCount - segmentSize, data.ColumnCount);
+            int counter = 0;
+            for (int i = 0; i < data.RowCount; i++)
+            {
+                if (i < (index * segmentSize) || i >= (index * segmentSize + segmentSize))
+                {
+                    for (int j = 0; j < data.ColumnCount; j++)
+                    {
+                        trainingData[counter, j] = data[i, j];
+                    }
+                    counter++;
+                }
+            }
+            return trainingData;
+        }
+
+        static Matrix<double> GetTestingData(Matrix<double> data, int segmentSize, int index)
+        {
+            Matrix<double> testingData = Matrix<double>.Build.Dense(segmentSize, data.ColumnCount);
+            int counter = 0;
+            for (int i = 0; i < data.RowCount; i++)
+            {
+                if (i >= (index * segmentSize) && i < (index * segmentSize + segmentSize))
+                {
+                    for (int j = 0; j < data.ColumnCount; j++)
+                    {
+                        testingData[counter, j] = data[i, j];
+                    }
+                    counter++;
+                }
+            }
+            return testingData;
+        }
+
+        static void Main(string[] args)
+        {
+            int segmentCount = 5;
+            int dimensions = 6;
+            Matrix<double> data = ReadData();
+            PrintAttributeNames();
+            int segmentSize = data.RowCount / segmentCount; 
+            Console.WriteLine("Duomenys iš failo: \n" + data.ToMatrixString());
+            Matrix<double> normalizedData = NormalizeData(data);
+            Console.WriteLine("Normalizuoti duomenys: \n" + normalizedData.ToMatrixString());
+            Matrix<double> covarienceMatrix = GetCovarianceMatrix(normalizedData);
+            Console.WriteLine("Kovariacijos matrica: \n" + covarienceMatrix.ToMatrixString());
+            List<KeyValuePair<double, double>> ftrSortedCovarianceList = GetSortedFullTimeResultCovariance(covarienceMatrix);
+            PrintCovarianceList(ftrSortedCovarianceList);
+            Matrix<double> reducedData = GetReducedMatrix(ftrSortedCovarianceList, normalizedData, dimensions);
+            Console.WriteLine("Duomenys po dimensijų sumažinimo: \n" + reducedData.ToMatrixString());
+            Console.WriteLine("");
+            Console.WriteLine("");
+            Console.WriteLine("");
+            Console.WriteLine("");
+            int homeCount = 0;
+            int drawCount = 0;
+            int awayCount = 0;
+
+            for (int j = 0; j < reducedData.RowCount; j++)
+            {
+                if (reducedData[j ,0] == 0)
+                {
+                    homeCount++;
+                }
+                else if (reducedData[j, 0] == 0.5)
+                {
+                    drawCount++;
+                }
+                else
+                {
+                    awayCount++;
+                }
+            }
+
+            Console.WriteLine("Home: {0}", homeCount);
+            Console.WriteLine("Draw: {0}", drawCount);
+            Console.WriteLine("Away: {0}", awayCount);
+            kMeansClustering clustering = new kMeansClustering(reducedData, 3);
+            clustering.Cluster();
+            for (int i = 0; i < segmentCount; i++)
+            {
+                Matrix<double> trainingData = GetTrainingData(reducedData, segmentSize, i);
+                Matrix<double> testingData = GetTestingData(reducedData, segmentSize, i);
+                
+              //  KNN kNN = new KNN(trainingData, 1);
+              //  kNN.ClassifyList(testingData, i);
+                
+                /*Counts ftrTotals = CalculateFullTimeResultsTotals(trainingData);
+                Console.WriteLine("Namų komandų pergalės: {0}, Lygiosios: {1}, Išvykos komandų pergalės: {2}",
+                    ftrTotals.lowCount, ftrTotals.mediumCount, ftrTotals.highCount);
+                Dictionary<int, List<Counts>> jointCounts = CalculateJointCounts(trainingData, ftrTotals);
+                //  PrintJointCounts(jointCounts);
+                Console.WriteLine("{0}\nIteracija nr. {1}\n{2}", DASHES, i + 1, DASHES);
+                AnalyzeData(trainingData, jointCounts, ftrTotals, "Mokymosi duomenys");
+                Console.WriteLine(DASHES);
+                AnalyzeData(testingData, jointCounts, ftrTotals, "Testavimo duomenys");
+                Console.WriteLine(DASHES);*/
+            } 
+        }
+
+        static void PrintAttributeNames()
+        {
+            Console.WriteLine("Atributų pavadinimai:");
+            for (int i = 0; i < ATTRIBUTE_NAMES.Count; i++)
+            {
+                Console.Write(ATTRIBUTE_NAMES[i] + " ");
+            }
+            Console.WriteLine("");
+        }
+
         static void PrintCovarianceList(List<KeyValuePair<double, double>> ftrSortedCovarianceList)
         {
-            Console.WriteLine("Full Time Result stulpelio kovariacijos reikšmės lyginant su kitais stulpeliais surikiuotos mažėjimo tvarka");
+            Console.WriteLine("{0} stulpelio kovariacijos reikšmės lyginant su kitais stulpeliais surikiuotos mažėjimo tvarka:",
+                ATTRIBUTE_NAMES[FTR_COLUMN]);
             for (int i = 0; i < ftrSortedCovarianceList.Count; i++)
             {
-                Console.WriteLine("[{0}, {1}]", ftrSortedCovarianceList[i].Key, ftrSortedCovarianceList[i].Value);
+                Console.WriteLine("[{0}, {1}]", ATTRIBUTE_NAMES[(int)ftrSortedCovarianceList[i].Key], ftrSortedCovarianceList[i].Value);
             }
         }
 
@@ -368,7 +497,7 @@ namespace IntelektikaProjektas
                 Console.WriteLine("");
             }
         }
-        
+
         static void PrintJointCounts(Dictionary<int, List<Counts>> jointCounts)
         {
             foreach (var item in jointCounts)
@@ -403,76 +532,6 @@ namespace IntelektikaProjektas
                 }
                 Console.WriteLine(DASHES);
             }
-        }
-
-        static string[,] GetTrainingData(string[,] data, int segmentSize, int index)
-        {
-            string[,] trainingData = new string[data.GetLength(0) - segmentSize, data.GetLength(1)];
-            int counter = 0;
-            for (int i = 0; i < data.GetLength(0); i++)
-            {
-                if (i < (index * segmentSize) || i >= (index * segmentSize + segmentSize))
-                {
-                    for (int j = 0; j < data.GetLength(1); j++)
-                    {
-                        trainingData[counter, j] = data[i, j];
-                    }
-                    counter++;
-                }
-            }
-            return trainingData;
-        }
-
-        static string[,] GetTestingData(string[,] data, int segmentSize, int index)
-        {
-            string[,] testingData = new string[segmentSize, data.GetLength(1)];
-            int counter = 0;
-            for (int i = 0; i < data.GetLength(0); i++)
-            {
-                if (i >= (index * segmentSize) && i < (index * segmentSize + segmentSize))
-                {
-                    for (int j = 0; j < data.GetLength(1); j++)
-                    {
-                        testingData[counter, j] = data[i, j];
-                    }
-                    counter++;
-                }
-            }
-            return testingData;
-        }
-
-        static void Main(string[] args)
-        {
-            int segmentCount = 10;
-            int dimensions = 5;
-            Matrix<double> data = ReadData();
-            int segmentSize = data.RowCount / segmentCount; 
-            Console.WriteLine("Duomenys iš failo: \n" + data.ToMatrixString());
-            Matrix<double> normalizedData = NormalizeData(data);
-            Console.WriteLine("Normalizuoti duomenys: \n" + normalizedData.ToMatrixString());
-            Matrix<double> covarienceMatrix = GetCovarianceMatrix(data);
-            Console.WriteLine("Kovariacijos matrica: \n" + covarienceMatrix.ToMatrixString());
-            List<KeyValuePair<double, double>> ftrSortedCovarianceList = GetSortedFullTimeResultCovariance(covarienceMatrix);
-            PrintCovarianceList(ftrSortedCovarianceList);
-            Matrix<double> newData = GetReducedMatrix(ftrSortedCovarianceList, normalizedData, dimensions);
-            Console.WriteLine("Duomenys po dimencijų sumažinimo: \n" + newData.ToMatrixString());
-            string[,] binnedData = BinData(newData);
-            PrintBinnedData(binnedData);
-            for (int i = 0; i < segmentCount; i++)
-            {
-                string[,] trainingData = GetTrainingData(binnedData, segmentSize, i);
-                string[,] testingData = GetTestingData(binnedData, segmentSize, i);
-                Counts ftrTotals = CalculateFullTimeResultsTotals(trainingData);
-                Console.WriteLine("Namų komandų pergalės: {0}, Lygiosios: {1}, Išvykos komandų pergalės: {2}",
-                    ftrTotals.lowCount, ftrTotals.mediumCount, ftrTotals.highCount);
-                Dictionary<int, List<Counts>> jointCounts = CalculateJointCounts(trainingData, ftrTotals);
-                //  PrintJointCounts(jointCounts);
-                Console.WriteLine("{0}\nIteracija nr. {1}\n{2}", DASHES, i + 1, DASHES);
-                AnalyzeData(trainingData, jointCounts, ftrTotals, "Mokymosi duomenys");
-                Console.WriteLine(DASHES);
-                AnalyzeData(testingData, jointCounts, ftrTotals, "Testavimo duomenys");
-                Console.WriteLine(DASHES);
-            } 
         }
     }
 }
