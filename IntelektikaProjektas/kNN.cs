@@ -24,11 +24,17 @@ namespace IntelektikaProjektas
             data = _data;
         }
 
-        public void ClassifyList(Matrix<double> instances, int index)
+        public void ClassifyList(Matrix<double> instances, string type, int? index = null)
         {
             Console.WriteLine(DASHES);
-            Console.WriteLine("{0} Iteracija.", index);
-            Console.WriteLine(DASHES);
+            if (index != null)
+            {
+                Console.WriteLine("kNN");
+                Console.WriteLine("{0} Iteracija.", index);
+                Console.WriteLine(DASHES);
+            }
+
+            Console.WriteLine(type);
             int correctCount = 0;
             int wrongCount = 0;
             for (int j = 0; j < instances.RowCount; j++)
@@ -41,8 +47,8 @@ namespace IntelektikaProjektas
                 {
                     wrongCount++;
                 }
-
             }
+
             Console.WriteLine("Teisingi: {0}", correctCount);
             Console.WriteLine("Teisingi procentais: {0}%", Math.Round((double)correctCount / instances.RowCount * 100, 2));
             Console.WriteLine("Neteisingi: {0}", wrongCount);
@@ -50,12 +56,6 @@ namespace IntelektikaProjektas
             Console.WriteLine(DASHES);
         }
 
-        /// <summary>
-        /// Classifies the instance according to a kNN algorithm
-        /// calculates Eucledian distance between the instance and the know data
-        /// </summary>
-        /// <param name="instance">List of doubles representing the instance values</param>
-        /// <returns>returns string - classification</returns>
         public bool Classify(Vector<double> instance)
         {
             double expectedResult = instance[0];

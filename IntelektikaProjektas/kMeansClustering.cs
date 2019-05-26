@@ -1,10 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Net;
-using Newtonsoft.Json;
 using MathNet.Numerics.LinearAlgebra;
 
 namespace IntelektikaProjektas
@@ -15,6 +9,7 @@ namespace IntelektikaProjektas
         private int numClusters;
         private int[] clustering;
         private double[,] means;
+        static string DASHES = new string('-', 50);
 
         public kMeansClustering(Matrix<double> _data, int _numClusters)
         {
@@ -37,20 +32,24 @@ namespace IntelektikaProjektas
                 success = UpdateMeans();
                 changed = UpdateClustering();
             }
-            int homeCount = 0;
-            int awayCount = 0;
-            int drawCount = 0;
+
+            int cluster1Count = 0;
+            int cluster2Count = 0;
+            int cluster3Count = 0;
             for (int i = 0; i < clustering.Length; i++)
             {
-                if (clustering[i] == 0) homeCount++;
-                else if (clustering[i] == 1) drawCount++;
-                else awayCount++;
+                if (clustering[i] == 0) cluster1Count++;
+                else if (clustering[i] == 1) cluster2Count++;
+                else cluster3Count++;
                 
             }
-            Console.WriteLine(homeCount);
-            Console.WriteLine(drawCount);
-            Console.WriteLine(awayCount);
 
+            Console.WriteLine(DASHES);
+            Console.WriteLine("K means clustering");
+            Console.WriteLine("Cluster 1: {0}", cluster1Count);
+            Console.WriteLine("Cluster 2: {0}", cluster2Count);
+            Console.WriteLine("Cluster 3: {0}", cluster3Count);
+            Console.WriteLine(DASHES);
         }
 
         private void InitClustering()
@@ -109,7 +108,6 @@ namespace IntelektikaProjektas
             bool changed = false;
             int[] newClustering = new int[clustering.Length];
             Array.Copy(clustering, newClustering, clustering.Length);
-
             double[] distances = new double[numClusters];
 
             for (int i = 0; i < data.RowCount; i++)
@@ -118,6 +116,7 @@ namespace IntelektikaProjektas
                 {
                     distances[j] = Distance(data.Row(i), j);
                 }
+
                 int newCluster = MinIndex(distances);
                 if (newCluster != newClustering[i])
                 {
